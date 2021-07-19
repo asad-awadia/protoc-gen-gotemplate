@@ -23,6 +23,8 @@ var (
 	registry *ggdescriptor.Registry // some helpers need access to registry
 )
 
+const timestamp = "timestamp"
+
 var ProtoHelpersFuncMap = template.FuncMap{
 	"string": func(i interface {
 		String() string
@@ -84,6 +86,9 @@ var ProtoHelpersFuncMap = template.FuncMap{
 		}
 
 		return strings.ToLower(s[:1]) + s[1:]
+	},
+	"upperCase": func(s string) string {
+		return strings.ToUpper(s)
 	},
 	"kebabCase": func(s string) string {
 		return strings.Replace(xstrings.ToSnakeCase(s), "_", "-", -1)
@@ -163,6 +168,10 @@ var ProtoHelpersFuncMap = template.FuncMap{
 	"getStore":                     getStore,
 	"goPkg":                        goPkg,
 	"goPkgLastElement":             goPkgLastElement,
+	"cppType":                      cppType,
+	"cppTypeWithPackage":           cppTypeWithPackage,
+	"rustType":                     rustType,
+	"rustTypeWithPackage":          rustTypeWithPackage,
 }
 
 var pathMap map[interface{}]*descriptor.SourceCodeInfo_Location
@@ -823,7 +832,7 @@ func goTypeWithGoPackage(p *descriptor.FileDescriptorProto, f *descriptor.FieldD
 	pkg := ""
 	if *f.Type == descriptor.FieldDescriptorProto_TYPE_MESSAGE || *f.Type == descriptor.FieldDescriptorProto_TYPE_ENUM {
 		if isTimestampPackage(*f.TypeName) {
-			pkg = "timestamp"
+			pkg = timestamp
 		} else {
 			pkg = *p.GetOptions().GoPackage
 			if strings.Contains(*p.GetOptions().GoPackage, ";") {
@@ -839,7 +848,7 @@ func goTypeWithPackage(f *descriptor.FieldDescriptorProto) string {
 	pkg := ""
 	if *f.Type == descriptor.FieldDescriptorProto_TYPE_MESSAGE || *f.Type == descriptor.FieldDescriptorProto_TYPE_ENUM {
 		if isTimestampPackage(*f.TypeName) {
-			pkg = "timestamp"
+			pkg = timestamp
 		} else {
 			pkg = getPackageTypeName(*f.TypeName)
 		}
@@ -907,6 +916,108 @@ func haskellType(pkg string, f *descriptor.FieldDescriptorProto) string {
 	default:
 		return "Generic"
 	}
+}
+
+// Warning does not handle message embedded like goTypeWithGoPackage does.
+func rustTypeWithPackage(f *descriptor.FieldDescriptorProto) string {
+	pkg := ""
+	if *f.Type == descriptor.FieldDescriptorProto_TYPE_MESSAGE || *f.Type == descriptor.FieldDescriptorProto_TYPE_ENUM {
+		if isTimestampPackage(*f.TypeName) {
+			pkg = timestamp
+		} else {
+			pkg = getPackageTypeName(*f.TypeName)
+		}
+	}
+	return rustType(pkg, f)
+}
+
+func rustType(pkg string, f *descriptor.FieldDescriptorProto) string {
+	isRepeat := *f.Label == descriptor.FieldDescriptorProto_LABEL_REPEATED
+	typeName := "???"
+	switch *f.Type {
+	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
+		typeName = "f64"
+	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
+		typeName = "f32"
+	case descriptor.FieldDescriptorProto_TYPE_INT64:
+		typeName = "i64"
+	case descriptor.FieldDescriptorProto_TYPE_UINT64:
+		typeName = "u64"
+	case descriptor.FieldDescriptorProto_TYPE_INT32:
+		typeName = "i32"
+	case descriptor.FieldDescriptorProto_TYPE_UINT32:
+		typeName = "u32"
+	case descriptor.FieldDescriptorProto_TYPE_BOOL:
+		typeName = "bool"
+	case descriptor.FieldDescriptorProto_TYPE_STRING:
+		typeName = "String"
+	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
+		if pkg != "" {
+			pkg = pkg + "."
+		}
+		typeName = fmt.Sprintf("%s%s", pkg, shortType(*f.TypeName))
+	case descriptor.FieldDescriptorProto_TYPE_BYTES:
+		typeName = "Vec<u8>"
+	case descriptor.FieldDescriptorProto_TYPE_ENUM:
+		typeName = fmt.Sprintf("%s%s", pkg, shortType(*f.TypeName))
+	default:
+		break
+	}
+	if isRepeat {
+		return "Vec<" + typeName + ">"
+	}
+	return typeName
+}
+
+// Warning does not handle message embedded like goTypeWithGoPackage does.
+func cppTypeWithPackage(f *descriptor.FieldDescriptorProto) string {
+	pkg := ""
+	if *f.Type == descriptor.FieldDescriptorProto_TYPE_MESSAGE || *f.Type == descriptor.FieldDescriptorProto_TYPE_ENUM {
+		if isTimestampPackage(*f.TypeName) {
+			pkg = timestamp
+		} else {
+			pkg = getPackageTypeName(*f.TypeName)
+		}
+	}
+	return cppType(pkg, f)
+}
+
+func cppType(pkg string, f *descriptor.FieldDescriptorProto) string {
+	isRepeat := *f.Label == descriptor.FieldDescriptorProto_LABEL_REPEATED
+	typeName := "???"
+	switch *f.Type {
+	case descriptor.FieldDescriptorProto_TYPE_DOUBLE:
+		typeName = "double"
+	case descriptor.FieldDescriptorProto_TYPE_FLOAT:
+		typeName = "float"
+	case descriptor.FieldDescriptorProto_TYPE_INT64:
+		typeName = "int64_t"
+	case descriptor.FieldDescriptorProto_TYPE_UINT64:
+		typeName = "uint64_t"
+	case descriptor.FieldDescriptorProto_TYPE_INT32:
+		typeName = "int32_t"
+	case descriptor.FieldDescriptorProto_TYPE_UINT32:
+		typeName = "uint32_t"
+	case descriptor.FieldDescriptorProto_TYPE_BOOL:
+		typeName = "bool"
+	case descriptor.FieldDescriptorProto_TYPE_STRING:
+		typeName = "std::string"
+	case descriptor.FieldDescriptorProto_TYPE_MESSAGE:
+		if pkg != "" {
+			pkg = pkg + "."
+		}
+		typeName = fmt.Sprintf("%s%s", pkg, shortType(*f.TypeName))
+	case descriptor.FieldDescriptorProto_TYPE_BYTES:
+		typeName = "std::vector<uint8_t>"
+	case descriptor.FieldDescriptorProto_TYPE_ENUM:
+		typeName = fmt.Sprintf("%s%s", pkg, shortType(*f.TypeName))
+	default:
+		break
+	}
+	if isRepeat {
+		return "std::vector<" + typeName + ">"
+	}
+	return typeName
 }
 
 func goTypeWithEmbedded(pkg string, f *descriptor.FieldDescriptorProto, p *descriptor.FileDescriptorProto) string {
@@ -1255,6 +1366,13 @@ func urlHasVarsFromMessage(path string, d *ggdescriptor.Message) bool {
 	for _, field := range d.Field {
 		if !isFieldMessage(field) {
 			if strings.Contains(path, fmt.Sprintf("{%s}", *field.Name)) {
+				return true
+			}
+			// JSON name field is checked as fallback. The value set by the protocol compiler.
+			// If the user has set a "json_name" option on a field, that option's value
+			// will be used in this check. By default value in this property will be field name in
+			// camelCase format.
+			if strings.Contains(path, fmt.Sprintf("{%s}", *field.JsonName)) {
 				return true
 			}
 		}
